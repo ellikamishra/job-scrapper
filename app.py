@@ -155,7 +155,7 @@ def _run_scraper(companies, skills, job_locations, exp_levels, delay, log_lines)
             return []
 
     all_jobs: list[dict] = []
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {executor.submit(_scrape_one, c): c for c in companies}
         for future in as_completed(futures):
             all_jobs.extend(future.result())
@@ -171,6 +171,8 @@ if "custom_skills" not in st.session_state:
     st.session_state.custom_skills = []
 if "custom_job_locs" not in st.session_state:
     st.session_state.custom_job_locs = []
+if "results_history" not in st.session_state:
+    st.session_state.results_history = []  # list of (timestamp, description, df)
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -473,7 +475,7 @@ if run_btn:
             cap.lines.append(f"  [!] Error: {e}")
         return company, jobs, cap.lines
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {executor.submit(_scrape_one_company, c): c for c in companies}
         for future in as_completed(futures):
             company, jobs, lines = future.result()
@@ -485,9 +487,28 @@ if run_btn:
             log_placeholder.code("\n".join(log_lines[-80:]), language=None)
 
     progress_bar.progress(100, text="Done!")
+    if all_jobs:
+        st.success(f"Scraping complete — **{len(all_jobs)}** jobs found across {len(companies)} companies")
+    else:
+        st.warning(
+            f"Scraping complete but **0 jobs** found across {len(companies)} companies. "
+            "This usually means requests were blocked by target sites. "
+            "Try **Auto-generate from location** mode or fewer skills/broader filters."
+        )
+        if log_lines:
+            with st.expander("View scrape log for details"):
+                st.code("\n".join(log_lines[-80:]), language=None)
     st.session_state.results_df = _jobs_to_df(all_jobs)
     st.session_state.log_lines = log_lines
-    st.success(f"✅ Scraping complete — **{len(all_jobs)}** jobs found across {len(companies)} companies")
+    # Save to history so results survive navigation
+    if all_jobs:
+        desc = f"{len(all_jobs)} jobs | {', '.join(all_skills[:3]) if all_skills else 'Any skills'}"
+        st.session_state.results_history.insert(0, (
+            time.strftime("%H:%M:%S"),
+            desc,
+            st.session_state.results_df.copy(),
+        ))
+        st.session_state.results_history = st.session_state.results_history[:5]
 
 # ── Results ───────────────────────────────────────────────────────────────────
 if not st.session_state.results_df.empty:
@@ -569,6 +590,18 @@ if not st.session_state.results_df.empty:
     )
 
 elif not run_btn:
+    # Show previous results if available
+    if st.session_state.results_history:
+        st.subheader("Previous results")
+        st.caption("Your past scrape runs (kept in memory). Click to restore.")
+        for i, (ts, desc, hist_df) in enumerate(st.session_state.results_history):
+            col_desc, col_btn = st.columns([4, 1])
+            col_desc.markdown(f"**{ts}** — {desc}")
+            if col_btn.button("Restore", key=f"restore_{i}", use_container_width=True):
+                st.session_state.results_df = hist_df
+                st.rerun()
+        st.divider()
+
     st.markdown(
         """
         ### How to use
