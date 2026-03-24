@@ -607,7 +607,7 @@ elif not run_btn:
         ### How to use
 
         1. **Choose a company source** in the sidebar:
-           - **Auto-generate**: picks from our curated 150+ company database by location.
+           - **Auto-generate from location**: picks from our curated 150+ company database by location.
            - **Discover from web**: dynamically finds companies hiring for your skills via LinkedIn & Google — no pre-existing list needed!
            - **Upload Excel**: provide your own company list.
         2. **Pick categories** (Big Tech, Startups, Quant firms, Trading, Fintech) — auto-generate mode only.
